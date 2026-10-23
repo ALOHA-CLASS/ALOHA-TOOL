@@ -1,0 +1,7 @@
+# 이 프로그램은 ffmpeg를 직접 호출하므로 Python 라이브러리가 필요하지 않습니다.
+# ffmpeg는 시스템에 별도로 설치되어야 합니다.
+
+# ffmpeg 설치 방법 (Windows):
+# 1. https://ffmpeg.org/download.html 에서 다운로드
+# 2. Chocolatey: choco install ffmpeg
+# 3. Scoop: scoop install ffmpeg

@@ -1,0 +1,37 @@
+이미지 리사이즈
+===============
+
+준비
+  Python 3.10 이상
+  이 폴더에서 실행: python -m pip install -r requirements.txt
+  원본 이미지를 input 폴더에 넣으세요.
+
+실행
+  python main.py
+  메뉴에서 가로, 세로, cover, contain 중 선택하고 픽셀 크기를 입력하세요.
+  결과는 main.py 옆의 output 폴더에 저장됩니다.
+
+명령행에서 바로 실행
+  python main.py --width 1200
+  python main.py --height 800
+  python main.py --width 800 --height 600 --mode cover
+  python main.py --width 800 --height 600 --mode contain
+  python main.py --width 1200 --input "C:\사진" --output "C:\결과"
+
+동작
+  가로만 지정: 세로는 원본 비율에 따라 계산합니다.
+  세로만 지정: 가로는 원본 비율에 따라 계산합니다.
+  cover: 비율을 유지해 영역을 채운 뒤 중앙을 기준으로 잘라 정확한 크기로 저장합니다.
+  contain: 비율을 유지하고 지정 영역 안에 맞춥니다. 자르거나 여백을 추가하지 않으므로
+           실제 결과의 한쪽 크기는 입력값보다 작을 수 있습니다.
+           예: 400x200 원본을 100x100에 contain -> 100x50
+  작은 이미지도 요청한 크기에 맞춰 확대합니다.
+  EXIF 회전 정보를 적용하고 원본 파일 형식과 투명도를 유지합니다.
+  원본은 변경하지 않으며 기존 결과 파일이 있으면 이름에 _1, _2 등을 붙입니다.
+  input 바로 아래의 JPG/JPEG, PNG, WebP, BMP, TIFF, GIF를 처리합니다.
+  하위 폴더, 애니메이션, 다중 페이지 파일은 지원하지 않습니다.
+  손상된 파일 등은 실패 이유를 출력하고 나머지를 계속 처리합니다.
+  실패가 있거나 처리할 이미지가 없으면 종료 코드 1을 반환합니다.
+
+검증
+  python -m unittest -v test_main
