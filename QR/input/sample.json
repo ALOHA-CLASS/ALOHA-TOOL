@@ -1,0 +1,33 @@
+{
+  "defaults": {
+    "size": 500,
+    "ext": "png",
+    "error_correction": "M"
+  },
+  "items": [
+    {
+      "name": "homepage",
+      "data": "https://example.com"
+    },
+    {
+      "name": "wifi",
+      "data": "WIFI:T:WPA;S:MyWiFi;P:password1234;;",
+      "size": 400
+    },
+    {
+      "name": "contact",
+      "data": "BEGIN:VCARD\nVERSION:3.0\nFN:홍길동\nTEL:010-1234-5678\nEND:VCARD",
+      "ext": "jpg",
+      "error_correction": "H"
+    },
+    {
+      "name": "colored",
+      "data": "Hello QR",
+      "size": 800,
+      "ext": "webp",
+      "fill_color": "#1a73e8",
+      "back_color": "#ffffff",
+      "border": 2
+    }
+  ]
+}
