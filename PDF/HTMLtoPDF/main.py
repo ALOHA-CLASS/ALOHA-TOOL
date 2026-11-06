@@ -6,8 +6,8 @@ HTML -> PDF 변환 프로그램 (보이는 그대로)
 화면(screen) 스타일과 배경색/배경 이미지를 그대로 유지합니다.
 
 모드
-  single (기본) : 페이지 나눔 없이 화면에 보이는 모습 전체를 한 장의 긴 PDF 페이지로 저장
-  paged         : A4 등 일반 용지 크기로 페이지를 나누어 저장
+  paged (기본)  : A4 등 일반 용지 크기로 페이지를 나누어 저장
+  single        : 화면에 보이는 모습 전체를 긴 PDF 페이지로 저장 (HTML의 강제 페이지 나눔은 유지)
 
 사용법
   1) 기본 실행
@@ -22,6 +22,7 @@ HTML -> PDF 변환 프로그램 (보이는 그대로)
 """
 
 import argparse
+import math
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -32,6 +33,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT_DIR = SCRIPT_DIR / "input"
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output"
 DEFAULT_WIDTH = 1280
+DEFAULT_MARGIN = 10
 # Chromium PDF 페이지 최대 높이(200인치)를 CSS px로 환산한 값
 MAX_PAGE_HEIGHT_PX = 200 * 96 - 2
 
@@ -125,6 +127,47 @@ def measure_height(page) -> int:
     ))
 
 
+def prepare_paged_layout(page, margin_mm: float):
+    """용지 여백을 통일하고 스크롤 표가 잘리지 않도록 인쇄 레이아웃을 보정한다."""
+    page.evaluate(
+        """() => {
+            for (const table of document.querySelectorAll('table')) {
+                for (let element = table.parentElement; element; element = element.parentElement) {
+                    const style = getComputedStyle(element);
+                    if (['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX) ||
+                        ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowY)) {
+                        element.setAttribute('data-pdf-table-container', '');
+                    }
+                }
+            }
+        }"""
+    )
+    page.add_style_tag(content=f"@page {{ margin: {margin_mm}mm !important; }}")
+    page.add_style_tag(content="""
+        html, body { margin: 0 !important; padding: 0 !important; }
+        .page {
+            width: auto !important; max-width: none !important;
+            margin: 0 !important; padding: 0 !important;
+        }
+        [data-pdf-table-container] {
+            overflow: visible !important; height: auto !important;
+            max-height: none !important; min-width: 0 !important;
+            max-width: 100% !important; break-inside: auto !important;
+        }
+        .table-wrap, table { break-inside: auto !important; }
+        table {
+            width: 100% !important; min-width: 0 !important;
+            max-width: 100% !important; table-layout: fixed !important;
+        }
+        tr { break-inside: avoid !important; }
+        th, td, th *, td * {
+            box-sizing: border-box !important; max-width: 100% !important;
+            min-width: 0 !important; white-space: normal !important;
+            overflow-wrap: anywhere !important;
+        }
+    """)
+
+
 def convert(browser, source, dst: Path, args) -> str:
     """하나의 HTML을 PDF로 변환한다. 실제 사용된 모드를 반환한다."""
     context = browser.new_context(
@@ -152,11 +195,12 @@ def convert(browser, source, dst: Path, args) -> str:
                     height=f"{height}px",
                     print_background=True,
                     margin={"top": "0", "right": "0", "bottom": "0", "left": "0"},
-                    page_ranges="1",
                 )
                 return mode
 
-        margin = f"{args.margin}mm"
+        margin_mm = DEFAULT_MARGIN if args.margin is None else args.margin
+        prepare_paged_layout(page, margin_mm)
+        margin = f"{margin_mm}mm"
         page.pdf(
             path=str(dst),
             format=args.format,
@@ -170,6 +214,31 @@ def convert(browser, source, dst: Path, args) -> str:
         context.close()
 
 
+def margin_value(value: str) -> float:
+    try:
+        margin = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("여백은 0 이상의 숫자(mm)로 입력하세요.") from exc
+    if not math.isfinite(margin) or margin < 0:
+        raise argparse.ArgumentTypeError("여백은 0 이상의 유한한 숫자(mm)로 입력하세요.")
+    return margin
+
+
+def prompt_margin() -> float:
+    while True:
+        try:
+            value = input(f"상하좌우 여백(mm)을 입력하세요 [기본 {DEFAULT_MARGIN}, Enter]: ").strip()
+        except EOFError:
+            print(f"\n[안내] 입력을 읽을 수 없어 기본 여백 {DEFAULT_MARGIN}mm를 적용합니다.")
+            return DEFAULT_MARGIN
+        if not value:
+            return DEFAULT_MARGIN
+        try:
+            return margin_value(value)
+        except argparse.ArgumentTypeError as exc:
+            print(f"[오류] {exc}")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="HTML을 보이는 그대로 PDF로 변환합니다.")
     parser.add_argument("inputs", nargs="*", help="HTML 파일/폴더/URL (생략 시 input 폴더 전체)")
@@ -177,14 +246,15 @@ def build_parser():
                         help="입력 폴더 (기본: ./input)")
     parser.add_argument("--output", dest="output_dir", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="출력 폴더 (기본: ./output)")
-    parser.add_argument("--mode", choices=("single", "paged"), default="single",
-                        help="single: 한 장의 긴 페이지 / paged: 용지 크기로 분할 (기본: single)")
+    parser.add_argument("--mode", choices=("single", "paged"), default="paged",
+                        help="single: 긴 페이지 / paged: 용지 크기로 분할 (기본: paged, A4)")
     parser.add_argument("--width", type=int, default=DEFAULT_WIDTH,
                         help=f"렌더링 화면 폭(px) (기본: {DEFAULT_WIDTH})")
     parser.add_argument("--viewport-height", type=int, default=900, help="렌더링 화면 높이(px) (기본: 900)")
     parser.add_argument("--format", default="A4", help="paged 모드 용지 (A4, A3, Letter 등. 기본: A4)")
     parser.add_argument("--landscape", action="store_true", help="paged 모드 가로 방향")
-    parser.add_argument("--margin", type=float, default=0, help="paged 모드 여백(mm) (기본: 0)")
+    parser.add_argument("--margin", type=margin_value,
+                        help="paged 모드 여백(mm), 생략 시 실행 중 입력 (Enter: 10). HTML의 @page보다 우선")
     parser.add_argument("--print-css", action="store_true",
                         help="화면 스타일 대신 인쇄(@media print) 스타일 사용")
     parser.add_argument("--wait", type=int, default=300, help="렌더링 후 추가 대기(ms) (기본: 300)")
@@ -196,6 +266,8 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     args = build_parser().parse_args()
+    if args.margin is None and args.mode == "paged":
+        args.margin = prompt_margin()
 
     try:
         from playwright.sync_api import sync_playwright
